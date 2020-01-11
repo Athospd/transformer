@@ -1,21 +1,17 @@
----
-title: "Transformer model for language understanding"
-author: "Athos Petri Damiani"
-date: "05/01/2020"
-output: html_document
----
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+<!-- README.md is generated from README.Rmd. Please edit that file -->
 
-This code is the translation from Python to R of the Transformer Tutorial implemented by Google. 
+# Transformer model for language understanding
 
-Original link:  [https://www.tensorflow.org/tutorials/text/transformer](https://www.tensorflow.org/tutorials/text/transformer)
+This code is the translation from Python to R of the (awesome)
+Transformer Tutorial implemented by Google.
 
-[https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t](https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t)
+Original link: <https://www.tensorflow.org/tutorials/text/transformer>
 
-```{r, message=FALSE, warning=FALSE}
+Notebook:
+<https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t>
+
+``` r
 library(keras)
 library(tidyverse)
 library(tensorflow)
@@ -37,10 +33,9 @@ vec_sub <- function(vector, start, end) {
 }
 ```
 
-
 ## Setup input pipeline
 
-```{r, message=FALSE, warning=FALSE}
+``` r
 examples <- tfds::tfds_load(name = 'ted_hrlr_translate/pt_to_en')
 train_examples <- examples$train
 val_examples <- examples$validation
@@ -48,23 +43,23 @@ val_examples <- examples$validation
 
 Create a custom subwords tokenizer from the training dataset.
 
-```{r}
-tokenizer_en <- train_examples %>%
-  tensorflow::iterate(function(x) x$en$numpy()) %>%
-  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
-# tokenizer_en$save_to_file("tokenizer_en")
-# tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
+``` r
+# tokenizer_en <- train_examples %>%
+#   tensorflow::iterate(function(x) x$en$numpy()) %>%
+#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+# # tokenizer_en$save_to_file("tokenizer_en")
+tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
 ```
 
-```{r}
-tokenizer_pt <- train_examples %>%
-  tensorflow::iterate(function(x) x$pt$numpy()) %>%
-  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
-# tokenizer_pt$save_to_file("tokenizer_pt")
-# tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
+``` r
+# tokenizer_pt <- train_examples %>%
+#   tensorflow::iterate(function(x) x$pt$numpy()) %>%
+#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+# # tokenizer_pt$save_to_file("tokenizer_pt")
+tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
 ```
 
-```{r}
+``` r
 sample_string = 'Transformer is awesome.'
 tokenized_string <- tokenizer_en$encode(sample_string)
 paste('Tokenized string is ', paste(tokenized_string, collapse = " "))
@@ -73,26 +68,26 @@ original_string <- tokenizer_en$decode(tokenized_string)
 paste('The original string: ', original_string)
 ```
 
-```{r}
+``` r
 walk(tokenized_string, ~ print(sprintf("%s ------> %s", .x, tokenizer_en$decode(c(.x, 0L)))))
 ```
 
-```{r}
+``` r
 BUFFER_SIZE = 20000L
 BATCH_SIZE = 16L
 ```
 
-```{r}
+``` r
 MAX_LENGTH = 40L
 ```
 
-```{r}
+``` r
 train_examples_iterator <- train_examples %>%
   dataset_batch(10e6) %>%
   reticulate::as_iterator()
 ```
 
-```{r}
+``` r
 data_prep <- function(dataset) {
   # encode -------------------------------------------
   dataset_tbl <- tibble(
@@ -139,17 +134,17 @@ train_dataset <- data_prep(train_examples) %>%
 val_dataset <- data_prep(val_examples)
 ```
 
-```{r}
+``` r
 val_dataset_iterator <- val_dataset %>% as_iterator()
 ```
 
-```{r}
+``` r
 val_batch <- val_dataset_iterator %>% iter_next()
 val_batch$pt
 val_batch$en
 ```
 
-```{r}
+``` r
 vec_en <- val_batch$en[1,]$numpy() %>% as.integer()
 vec_pt <- val_batch$pt[1,]$numpy() %>% as.integer()
 
@@ -161,7 +156,7 @@ walk(vec_en[vec_en < vec_en[1] & vec_en > 0], ~ print(sprintf("%s ------> %s", .
 
 ## Positional encoding
 
-```{r}
+``` r
 get_angles <- function(pos, i, d_model) {
   angle_rates = 1 / 10000^(2 * floor(i/2) / d_model)
   pos %*% angle_rates
@@ -183,10 +178,9 @@ positional_encoding <- function(position, d_model) {
   
   angle_rads_tensor
 }
-
 ```
 
-```{r}
+``` r
 position = 50
 d_model = 512
 img_data <- positional_encoding(position, d_model)$numpy() 
@@ -210,7 +204,7 @@ img_data %>%
 
 ## Masking
 
-```{r}
+``` r
 create_padding_mask <- function(seq) {
   seq <- tf$cast(tf$math$equal(seq, 0L), tf$float32)
   # add extra dimensions to add the padding
@@ -226,14 +220,14 @@ x = tf$constant(list(list(7, 6, 0, 0, 1), list(1, 2, 3, 0, 0), list(0, 0, 0, 4, 
 create_padding_mask(x)
 ```
 
-```{r}
+``` r
 create_look_ahead_mask <- function(size) {
   mask <- 1 - tf$linalg$band_part(tf$ones(tuple(size, size)), -1L, 0L)
   return(mask)  # (seq_len, seq_len)
 }
 ```
 
-```{r}
+``` r
 x = tf$random$uniform(tuple(1L, 3L))
 temp = create_look_ahead_mask(x$shape[1])
 temp
@@ -241,7 +235,7 @@ temp
 
 ## Scaled dot product attention
 
-```{r}
+``` r
 scaled_dot_product_attention <- function(q, k, v, mask) {
   # Calculate the attention weights.
   # q, k, v must have matching leading dimensions.
@@ -278,7 +272,7 @@ scaled_dot_product_attention <- function(q, k, v, mask) {
 }
 ```
 
-```{r}
+``` r
 print_out <- function(q, k, v) {
   c(temp_out, temp_attn) %<-% scaled_dot_product_attention(q, k, v, NULL)
   print('Attention weights are:')
@@ -288,7 +282,7 @@ print_out <- function(q, k, v) {
 }
 ```
 
-```{r}
+``` r
 temp_k <- tf$constant(list(c(10,0,0),
                            c(0,10,0),
                            c(0,0,10),
@@ -305,30 +299,31 @@ temp_q <- tf$constant(list(c(0, 10, 0)), dtype = tf$float32)  # (1, 3)
 print_out(temp_q, temp_k, temp_v)
 ```
 
-```{r}
+``` r
 # This query aligns with a repeated key (third and fourth), 
 # so all associated values get averaged.
 temp_q <- tf$constant(list(c(0, 0, 10)), dtype = tf$float32)  # (1, 3)
 print_out(temp_q, temp_k, temp_v)
 ```
 
-```{r}
+``` r
 # This query aligns equally with the first and second key, 
 # so their values get averaged.
 temp_q <- tf$constant(list(c(10, 10, 0)), dtype = tf$float32)  # (1, 3)
 print_out(temp_q, temp_k, temp_v)
 ```
 
-Pass all the queries together.
+Pass all the queries
+together.
 
-```{r}
+``` r
 temp_q <- tf$constant(list(c(0, 0, 10), c(0, 10, 0), c(10, 10, 0)), dtype = tf$float32)  # (3, 3)
 print_out(temp_q, temp_k, temp_v)
 ```
 
 ## Multi-head attention
 
-```{r}
+``` r
 MultiHeadAttention <- PyClass(
   classname = "MultiHeadAttention", 
   inherit = tf$keras$layers$Layer, 
@@ -388,7 +383,7 @@ MultiHeadAttention <- PyClass(
 )
 ```
 
-```{r}
+``` r
 temp_mha <- MultiHeadAttention(d_model = 512L, num_heads = 8L)
 y <- tf$random$uniform(tuple(1L, 60L, 512L))  # (batch_size, encoder_sequence, d_model)
 c(out, attn) %<-% temp_mha$call(y, k = y, q = y, mask = NULL)
@@ -399,7 +394,7 @@ attn$get_shape()
 
 ## Point wise feed forward network
 
-```{r}
+``` r
 point_wise_feed_forward_network <- function(d_model, dff) {
   keras_model_sequential() %>%
     layer_dense(units = dff, activation = "relu") %>%
@@ -407,7 +402,7 @@ point_wise_feed_forward_network <- function(d_model, dff) {
 }
 ```
 
-```{r}
+``` r
 sample_ffn <- point_wise_feed_forward_network(512L, 2048L)
 sample_ffn(tf$random$uniform(tuple(64L, 50L, 512L)))$shape
 ```
@@ -416,7 +411,7 @@ sample_ffn(tf$random$uniform(tuple(64L, 50L, 512L)))$shape
 
 ### Encoder layer
 
-```{r}
+``` r
 EncoderLayer <- PyClass(
   "EncoderLayer",
   inherit = tf$keras$layers$Layer,
@@ -453,7 +448,7 @@ EncoderLayer <- PyClass(
 )
 ```
 
-```{r}
+``` r
 sample_encoder_layer <- EncoderLayer(512, 8, 2048)
 
 sample_encoder_layer_output = sample_encoder_layer$call(tf$random$uniform(tuple(64L, 43L, 512L)), FALSE, NULL)
@@ -463,7 +458,7 @@ sample_encoder_layer_output$shape  # (batch_size, input_seq_len, d_model)
 
 ### Decoder layer
 
-```{r}
+``` r
 DecoderLayer <- PyClass(
   "DecoderLayer",
   inherit = tf$keras$layers$Layer,
@@ -510,7 +505,7 @@ DecoderLayer <- PyClass(
 )
 ```
 
-```{r}
+``` r
 sample_decoder_layer <- DecoderLayer(512, 8, 2048)
 
 c(sample_decoder_layer_output, ., .) %<-% sample_decoder_layer$call(
@@ -526,7 +521,7 @@ sample_decoder_layer_output$shape  # (batch_size, target_seq_len, d_model)
 
 ### Encoder
 
-```{r}
+``` r
 Encoder <- PyClass(
   "Encoder",
   inherit = tf$keras$layers$Layer,
@@ -570,8 +565,7 @@ Encoder <- PyClass(
 )
 ```
 
-
-```{r}
+``` r
 sample_encoder <- Encoder(
   num_layers = 2L, 
   d_model = 512L, 
@@ -590,7 +584,7 @@ print(sample_encoder_output$shape)  # (batch_size, input_seq_len, d_model)
 
 ### Decoder
 
-```{r}
+``` r
 Decoder <- PyClass(
   "Decoder",
   inherit = tf$keras$layers$Layer,
@@ -638,7 +632,7 @@ Decoder <- PyClass(
 )
 ```
 
-```{r}
+``` r
 sample_decoder <- Decoder(
   num_layers = 2L, 
   d_model = 512L, 
@@ -664,7 +658,7 @@ attn[['decoder_layer2_block2']]$shape
 
 ## Create the Transformer
 
-```{r}
+``` r
 
 Transformer <- PyClass(
   "Transformer",
@@ -699,7 +693,7 @@ Transformer <- PyClass(
 )
 ```
 
-```{r}
+``` r
 sample_transformer <- Transformer(
   num_layers = 2L, 
   d_model = 512L, 
@@ -728,7 +722,7 @@ fn_out$shape  # (batch_size, tar_seq_len, target_vocab_size)
 
 ## Set hyperparameters
 
-```{r}
+``` r
 num_layers = 4L
 d_model = 128L
 dff = 512L
@@ -741,7 +735,7 @@ dropout_rate = 0.1
 
 ## Optimizer
 
-```{r}
+``` r
 CustomSchedule <- PyClass(
   "CustomSchedule",
   inherit = tf$keras$optimizers$schedules$LearningRateSchedule,
@@ -770,13 +764,13 @@ CustomSchedule <- PyClass(
 )
 ```
 
-```{r}
+``` r
 learning_rate <- CustomSchedule(d_model)
 
 optimizer <- tf$keras$optimizers$Adam(learning_rate, beta_1 = 0.9, beta_2 = 0.98, epsilon = 1e-9)
 ```
 
-```{r, fig.width=5}
+``` r
 temp_learning_rate_schedule <- CustomSchedule(d_model)
 
 plot(temp_learning_rate_schedule(tf$range(40000, dtype = tf$float32))$numpy(), xlab = "Train Step", ylab = "Learning Rate", type = "l")
@@ -784,11 +778,11 @@ plot(temp_learning_rate_schedule(tf$range(40000, dtype = tf$float32))$numpy(), x
 
 ## Loss and metrics
 
-```{r}
+``` r
 loss_object <- tf$keras$losses$SparseCategoricalCrossentropy(from_logits = TRUE, reduction = 'none')
 ```
 
-```{r}
+``` r
 loss_function <- function(real, pred) {
   mask = tf$math$logical_not(tf$math$equal(real, 0L))
   loss_ = loss_object(real, pred)
@@ -800,14 +794,14 @@ loss_function <- function(real, pred) {
 }
 ```
 
-```{r}
+``` r
 train_loss <- tf$keras$metrics$Mean(name = 'train_loss')
 train_accuracy <- tf$keras$metrics$SparseCategoricalAccuracy(name = 'train_accuracy')
 ```
 
 ## Training and checkpointing
 
-```{r}
+``` r
 transformer <- Transformer(
   num_layers, 
   d_model, 
@@ -821,7 +815,7 @@ transformer <- Transformer(
 )
 ```
 
-```{r}
+``` r
 create_masks <- function(inp, tar) {
   browser()
   # Encoder padding mask
@@ -842,9 +836,10 @@ create_masks <- function(inp, tar) {
 }
 ```
 
-Create the checkpoint path and the checkpoint manager. This will be used to save checkpoints every n epochs.
+Create the checkpoint path and the checkpoint manager. This will be used
+to save checkpoints every n epochs.
 
-```{r}
+``` r
 checkpoint_path = "./checkpoints/train"
 
 ckpt <- tf$train$Checkpoint(transformer = transformer, optimizer = optimizer)
@@ -858,11 +853,11 @@ if(!is.null(ckpt_manager$latest_checkpoint)) {
 }
 ```
 
-```{r}
+``` r
 EPOCHS = 20
 ```
 
-```{r}
+``` r
 train_step_signature <- c(
   tf$TensorSpec(shape = c(NULL, NULL), dtype = tf$int64),
   tf$TensorSpec(shape = c(NULL, NULL), dtype = tf$int64)
@@ -897,7 +892,7 @@ train_step <- function(inp, tar) {
 }
 ```
 
-```{r}
+``` r
 for(epoch in seq_len(EPOCHS)) {
   start = Sys.time()
   
@@ -936,7 +931,7 @@ for(epoch in seq_len(EPOCHS)) {
 
 ## Evaluate (TODO)
 
-```{r}
+``` r
 evaluate <- function(inp_sentence) {
   inp_sentence <- "este é um problema que temos que resolver."
   start_token <- tokenizer_pt$vocab_size
@@ -982,11 +977,9 @@ evaluate <- function(inp_sentence) {
 
 sentence <- "este é um problema que temos que resolver."
 evaluate(sentence)
-
 ```
 
-
-```{r}
+``` r
 plot_attention_weigths <- function(attention, sentence, result, layer) {
   sentence = tokenizer_pt$encode(sentence)
   
@@ -1023,7 +1016,7 @@ plot_attention_weigths <- function(attention, sentence, result, layer) {
   plt.show()
 ```
 
-```{r}
+``` r
 translate <- function(sentense, plot = '') {
   c(result, attention_weights) %<-% evaluate(sentense)
   
@@ -1047,4 +1040,3 @@ def translate(sentence, plot=''):
   if plot:
     plot_attention_weights(attention_weights, sentence, result, plot)
 ```
-

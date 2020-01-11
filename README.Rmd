@@ -1,19 +1,26 @@
 ---
-title: "Transformer model for language understanding"
-author: "Athos Petri Damiani"
-date: "05/01/2020"
-output: html_document
+output: github_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  echo = TRUE,
+  eval = FALSE
+)
 ```
 
-This code is the translation from Python to R of the Transformer Tutorial implemented by Google. 
+
+# Transformer model for language understanding
+
+This code is the translation from Python to R of the (awesome) Transformer Tutorial implemented by Google. 
 
 Original link:  [https://www.tensorflow.org/tutorials/text/transformer](https://www.tensorflow.org/tutorials/text/transformer)
 
-[https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t](https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t)
+Notebook: [https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t](https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t)
 
 ```{r, message=FALSE, warning=FALSE}
 library(keras)
@@ -49,19 +56,19 @@ val_examples <- examples$validation
 Create a custom subwords tokenizer from the training dataset.
 
 ```{r}
-tokenizer_en <- train_examples %>%
-  tensorflow::iterate(function(x) x$en$numpy()) %>%
-  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
-# tokenizer_en$save_to_file("tokenizer_en")
-# tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
+# tokenizer_en <- train_examples %>%
+#   tensorflow::iterate(function(x) x$en$numpy()) %>%
+#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+# # tokenizer_en$save_to_file("tokenizer_en")
+tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
 ```
 
 ```{r}
-tokenizer_pt <- train_examples %>%
-  tensorflow::iterate(function(x) x$pt$numpy()) %>%
-  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
-# tokenizer_pt$save_to_file("tokenizer_pt")
-# tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
+# tokenizer_pt <- train_examples %>%
+#   tensorflow::iterate(function(x) x$pt$numpy()) %>%
+#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+# # tokenizer_pt$save_to_file("tokenizer_pt")
+tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
 ```
 
 ```{r}
