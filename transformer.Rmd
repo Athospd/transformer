@@ -1,5 +1,5 @@
 ---
-title: "Transformer"
+title: "Transformer model for language understanding"
 author: "Athos Petri Damiani"
 date: "05/01/2020"
 output: html_document
@@ -22,7 +22,7 @@ library(tensorflow)
 library(tfdatasets)
 library(zeallot)
 library(reticulate)
-library(comprehenr)
+library(assertthat)
 
 # If not installed yet, installs tfds package and tfds module in Python.
 # remotes::install_github("rstudio/tfds")
@@ -40,7 +40,7 @@ vec_sub <- function(vector, start, end) {
 
 ## Setup input pipeline
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 examples <- tfds::tfds_load(name = 'ted_hrlr_translate/pt_to_en')
 train_examples <- examples$train
 val_examples <- examples$validation
@@ -49,19 +49,19 @@ val_examples <- examples$validation
 Create a custom subwords tokenizer from the training dataset.
 
 ```{r}
-# tokenizer_en <- train_examples %>%
-#   tensorflow::iterate(function(x) x$en$numpy()) %>%
-#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+tokenizer_en <- train_examples %>%
+  tensorflow::iterate(function(x) x$en$numpy()) %>%
+  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
 # tokenizer_en$save_to_file("tokenizer_en")
-tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
+# tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
 ```
 
 ```{r}
-# tokenizer_pt <- train_examples %>%
-#   tensorflow::iterate(function(x) x$pt$numpy()) %>%
-#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+tokenizer_pt <- train_examples %>%
+  tensorflow::iterate(function(x) x$pt$numpy()) %>%
+  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
 # tokenizer_pt$save_to_file("tokenizer_pt")
-tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
+# tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
 ```
 
 ```{r}
@@ -79,7 +79,7 @@ walk(tokenized_string, ~ print(sprintf("%s ------> %s", .x, tokenizer_en$decode(
 
 ```{r}
 BUFFER_SIZE = 20000L
-BATCH_SIZE = 64L
+BATCH_SIZE = 16L
 ```
 
 ```{r}
@@ -408,7 +408,7 @@ point_wise_feed_forward_network <- function(d_model, dff) {
 ```
 
 ```{r}
-sample_ffn <- point_wise_feed_forward_network(512, 2048)
+sample_ffn <- point_wise_feed_forward_network(512L, 2048L)
 sample_ffn(tf$random$uniform(tuple(64L, 50L, 512L)))$shape
 ```
 
@@ -823,6 +823,7 @@ transformer <- Transformer(
 
 ```{r}
 create_masks <- function(inp, tar) {
+  browser()
   # Encoder padding mask
   enc_padding_mask <- create_padding_mask(inp)
   
@@ -833,7 +834,7 @@ create_masks <- function(inp, tar) {
   # Used in the 1st attention block in the decoder$
   # It is used to pad and mask future tokens in the input received by 
   # the decoder$
-  look_ahead_mask <- create_look_ahead_mask(tf$shape(tar)[2])
+  look_ahead_mask <- create_look_ahead_mask(tf$shape(tar)[length(tf$shape(tar)$numpy())])
   dec_target_padding_mask <- create_padding_mask(tar)
   combined_mask <- tf$maximum(dec_target_padding_mask, look_ahead_mask)
   
@@ -909,7 +910,7 @@ for(epoch in seq_len(EPOCHS)) {
     inp <- train_dataset_iter[[batch]]$pt
     tar <- train_dataset_iter[[batch]]$en
     train_step(inp, tar)
-    if(batch %% 5L == 0L){
+    if(batch %% 50L == 0L){
       cat(
         sprintf(
           'Epoch %s Batch %s Loss %.4f Accuracy %.4f\n', 
@@ -929,44 +930,120 @@ for(epoch in seq_len(EPOCHS)) {
     
   cat(sprintf('Epoch %s Loss %.4f Accuracy %.4f\n', epoch,  train_loss$result(), train_accuracy$result()))
 
-  cat(sprintf('Time taken for 1 epoch: %s secs\n', Sys.time() - start))
+  cat(sprintf('Time taken for 1 epoch: %s secs\n', difftime(Sys.time() , start, units='secs')))
 }
 ```
 
 ## Evaluate
+```{r}
+evaluate <- function(inp_sentence) {
+  inp_sentence <- "este é um problema que temos que resolver."
+  start_token <- tokenizer_pt$vocab_size
+  end_token <- tokenizer_pt$vocab_size + 1L
+  
+  # inp sentence is portuguese, hence adding the start and end token
+  inp_sentence <- as.integer(c(start_token, tokenizer_pt$encode(inp_sentence), end_token))
+  encoder_input <- tf$expand_dims(inp_sentence, 0L)
+  
+  # as the target is english, the first word to the transformer should be the
+  # english start token.
+  decoder_input <- tokenizer_en$vocab_size
+  output <- tf$expand_dims(decoder_input, 0L)
+  
+  for(i in seq_len(MAX_LENGTH)) {
+    browser()
+    c(enc_padding_mask, combined_mask, dec_padding_mask) %<-% create_masks(encoder_input, output)
+    
+    # predictions.shape == (batch_size, seq_len, vocab_size)
+    c(predictions, attention_weights) %<-% transformer$call(encoder_input, 
+                                                            output,
+                                                            FALSE,
+                                                            enc_padding_mask,
+                                                            combined_mask,
+                                                            dec_padding_mask)
+    
+    # select the last word from the seq_len dimension
+    predictions <- predictions[ ,length(predictions$numpy()), ]  # (batch_size, 1, vocab_size)
+    predicted_id <- tf$cast(tf$argmax(predictions, axis = -1L), tf.int32)
+        
+    # return the result if the predicted_id is equal to the end token
+    if(predicted_id == tokenizer_en$vocab_size + 1) {
+      return(list(tf$squeeze(output, axis = 0), attention_weights))
+    }
+    
+    # concatentate the predicted_id to the output which is given to the decoder
+    # as its input.
+    output <- tf$concat(list(output, predicted_id), axis = -1L)
+  }
+  
+  return(list(tf$squeeze(output, axis = 0L), attention_weights))
+}
+
+sentence <- "este é um problema que temos que resolver."
+evaluate(sentence)
+
+```
+
 
 ```{r}
-# def plot_attention_weights(attention, sentence, result, layer):
-#   fig = plt.figure(figsize=(16, 8))
-#   
-#   sentence = tokenizer_pt.encode(sentence)
-#   
-#   attention = tf.squeeze(attention[layer], axis=0)
-#   
-#   for head in range(attention.shape[0]):
-#     ax = fig.add_subplot(2, 4, head+1)
-#     
-#     # plot the attention weights
-#     ax.matshow(attention[head][:-1, :], cmap='viridis')
-# 
-#     fontdict = {'fontsize': 10}
-#     
-#     ax.set_xticks(range(len(sentence)+2))
-#     ax.set_yticks(range(len(result)))
-#     
-#     ax.set_ylim(len(result)-1.5, -0.5)
-#         
-#     ax.set_xticklabels(
-#         ['<start>']+[tokenizer_pt.decode([i]) for i in sentence]+['<end>'], 
-#         fontdict=fontdict, rotation=90)
-#     
-#     ax.set_yticklabels([tokenizer_en.decode([i]) for i in result 
-#                         if i < tokenizer_en.vocab_size], 
-#                        fontdict=fontdict)
-#     
-#     ax.set_xlabel('Head {}'.format(head+1))
-#   
-#   plt.tight_layout()
-#   plt.show()
+plot_attention_weigths <- function(attention, sentence, result, layer) {
+  sentence = tokenizer_pt$encode(sentence)
+  
+  attention = tf$squeeze(attention[[layer]], axis=0)
+  
+  return(attention)
+}
+
+
+  for head in range(attention.shape[0]):
+    ax = fig.add_subplot(2, 4, head+1)
+
+    # plot the attention weights
+    ax.matshow(attention[head][:-1, :], cmap='viridis')
+
+    fontdict = {'fontsize': 10}
+
+    ax.set_xticks(range(len(sentence)+2))
+    ax.set_yticks(range(len(result)))
+
+    ax.set_ylim(len(result)-1.5, -0.5)
+
+    ax.set_xticklabels(
+        ['<start>']+[tokenizer_pt.decode([i]) for i in sentence]+['<end>'],
+        fontdict=fontdict, rotation=90)
+
+    ax.set_yticklabels([tokenizer_en.decode([i]) for i in result
+                        if i < tokenizer_en.vocab_size],
+                       fontdict=fontdict)
+
+    ax.set_xlabel('Head {}'.format(head+1))
+
+  plt.tight_layout()
+  plt.show()
+```
+
+```{r}
+translate <- function(sentense, plot = '') {
+  c(result, attention_weights) %<-% evaluate(sentense)
+  
+  predicted_sentence <- tokenizer_en$decode(result[result < tokenizer_en$vocab_size])
+  
+  return(list(input = sentense, output = predicted_sentence))
+}
+
+translate("este é um problema que temos que resolver.")
+print ("Real translation: this is a problem we have to solve .")
+
+def translate(sentence, plot=''):
+  result, attention_weights = evaluate(sentence)
+  
+  predicted_sentence = tokenizer_en.decode([i for i in result 
+                                            if i < tokenizer_en.vocab_size])  
+
+  print('Input: {}'.format(sentence))
+  print('Predicted translation: {}'.format(predicted_sentence))
+  
+  if plot:
+    plot_attention_weights(attention_weights, sentence, result, plot)
 ```
 
