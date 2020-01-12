@@ -49,19 +49,19 @@ val_examples <- examples$validation
 Create a custom subwords tokenizer from the training dataset.
 
 ```{r}
-tokenizer_en <- train_examples %>%
-  tensorflow::iterate(function(x) x$en$numpy()) %>%
-  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
-# tokenizer_en$save_to_file("tokenizer_en")
-# tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
+# tokenizer_en <- train_examples %>%
+#   tensorflow::iterate(function(x) x$en$numpy()) %>%
+#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+# # tokenizer_en$save_to_file("tokenizer_en")
+tokenizer_en <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_en")
 ```
 
 ```{r}
-tokenizer_pt <- train_examples %>%
-  tensorflow::iterate(function(x) x$pt$numpy()) %>%
-  tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
-# tokenizer_pt$save_to_file("tokenizer_pt")
-# tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
+# tokenizer_pt <- train_examples %>%
+#   tensorflow::iterate(function(x) x$pt$numpy()) %>%
+#   tfds$features$text$SubwordTextEncoder$build_from_corpus(2^13)
+# # tokenizer_pt$save_to_file("tokenizer_pt")
+tokenizer_pt <- tfds$features$text$SubwordTextEncoder$load_from_file("tokenizer_pt")
 ```
 
 ```{r}

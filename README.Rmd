@@ -9,7 +9,7 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   echo = TRUE,
-  eval = FALSE
+  eval = TRUE
 )
 ```
 
@@ -904,7 +904,7 @@ train_step <- function(inp, tar) {
 }
 ```
 
-```{r}
+```{r, eval = FALSE}
 for(epoch in seq_len(EPOCHS)) {
   start = Sys.time()
   
@@ -943,7 +943,7 @@ for(epoch in seq_len(EPOCHS)) {
 
 ## Evaluate (TODO)
 
-```{r}
+```{r, eval = FALSE}
 evaluate <- function(inp_sentence) {
   inp_sentence <- "este é um problema que temos que resolver."
   start_token <- tokenizer_pt$vocab_size
@@ -993,7 +993,7 @@ evaluate(sentence)
 ```
 
 
-```{r}
+```{r, eval = FALSE}
 plot_attention_weigths <- function(attention, sentence, result, layer) {
   sentence = tokenizer_pt$encode(sentence)
   
@@ -1030,7 +1030,7 @@ plot_attention_weigths <- function(attention, sentence, result, layer) {
   plt.show()
 ```
 
-```{r}
+```{r, eval = FALSE}
 translate <- function(sentense, plot = '') {
   c(result, attention_weights) %<-% evaluate(sentense)
   
