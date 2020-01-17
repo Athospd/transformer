@@ -16,11 +16,11 @@ knitr::opts_chunk$set(
 
 # Transformer model for language understanding
 
-This code is the translation from Python to R of the (awesome) Transformer Tutorial implemented by Google. 
+This code is the translation from Python to R of the Transformer Tutorial implemented by Google. 
 
 Original link:  [https://www.tensorflow.org/tutorials/text/transformer](https://www.tensorflow.org/tutorials/text/transformer)
 
-Notebook: [https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t](https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t)
+[https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t](https://colab.research.google.com/github/tensorflow/docs/blob/master/site/en/tutorials/text/transformer.ipynb#scrollTo=15VYkkSfKE3t)
 
 ```{r, message=FALSE, warning=FALSE}
 library(keras)
@@ -130,7 +130,12 @@ data_prep <- function(dataset) {
     keep(is_smaller_than_max_length(dataset_tbl)) %>% 
     transpose() %>%
     map(~{
-      .x %>% map(`length<-`, MAX_LENGTH) %>% do.call(rbind, .) %>% as.matrix() %>% coalesce(0L) %>% tf$convert_to_tensor(dtype = tf$int64)
+      .x %>% 
+        map(`length<-`, MAX_LENGTH) %>% 
+        do.call(rbind, .) %>% 
+        as.matrix() %>% 
+        coalesce(0L) %>% 
+        tf$convert_to_tensor(dtype = tf$int64)
     }) %>% 
     tensor_slices_dataset() %>%
     dataset_shuffle(BUFFER_SIZE) %>%
@@ -222,8 +227,9 @@ create_padding_mask <- function(seq) {
   seq <- tf$cast(tf$math$equal(seq, 0L), tf$float32)
   # add extra dimensions to add the padding
   # to the attention logits.
-  shape <- seq$get_shape()$as_list()
-  seq <- tf$reshape(seq, tuple(shape[1], 1L, 1L, shape[2]))
+  shape <- as.integer(seq$get_shape()$as_list())
+  shape <- if(length(shape) == 1) c(1L, shape) else shape
+  seq <- tf$reshape(seq, tuple(shape[1], 1L, 1L, shape[length(shape)]))
   return(seq)
 }
 
@@ -558,7 +564,7 @@ Encoder <- PyClass(
     ###
     call = function(self, x, training, mask) {
       
-      seq_len = tf$shape(x)[2]
+      seq_len = tf$shape(x)[length(tf$shape(x)$numpy())]
       # adding embedding and position encoding$
       x = self$embedding(x)  # (batch_size, input_seq_len, d_model)
       x = x * tf$math$sqrt(tf$cast(self$d_model, tf$float32))
@@ -622,7 +628,8 @@ Decoder <- PyClass(
     
     ###
     call = function(self, x, enc_output, training, look_ahead_mask, padding_mask) {
-      seq_len = tf$shape(x)[2]
+      
+      seq_len = tf$shape(x)[length(tf$shape(x)$numpy())]
       attention_weights = list()
       
       x = self$embedding(x)  # (batch_size, target_seq_len, d_model)
@@ -672,7 +679,6 @@ attn[['decoder_layer2_block2']]$shape
 ## Create the Transformer
 
 ```{r}
-
 Transformer <- PyClass(
   "Transformer",
   inherit = tf$keras$Model,
@@ -692,7 +698,6 @@ Transformer <- PyClass(
     
     ###
     call = function(self, inp, tar, training, enc_padding_mask, look_ahead_mask, dec_padding_mask) {
-      
       enc_output = self$encoder$call(inp, training, enc_padding_mask)  # (batch_size, inp_seq_len, d_model)
       
       # dec_output$shape == (batch_size, tar_seq_len, d_model)
@@ -828,9 +833,9 @@ transformer <- Transformer(
 )
 ```
 
+
 ```{r}
 create_masks <- function(inp, tar) {
-  browser()
   # Encoder padding mask
   enc_padding_mask <- create_padding_mask(inp)
   
@@ -904,7 +909,7 @@ train_step <- function(inp, tar) {
 }
 ```
 
-```{r, eval = FALSE}
+```{r}
 for(epoch in seq_len(EPOCHS)) {
   start = Sys.time()
   
@@ -941,11 +946,10 @@ for(epoch in seq_len(EPOCHS)) {
 }
 ```
 
-## Evaluate (TODO)
+## Evaluate
 
-```{r, eval = FALSE}
+```{r}
 evaluate <- function(inp_sentence) {
-  inp_sentence <- "este é um problema que temos que resolver."
   start_token <- tokenizer_pt$vocab_size
   end_token <- tokenizer_pt$vocab_size + 1L
   
@@ -959,7 +963,6 @@ evaluate <- function(inp_sentence) {
   output <- tf$expand_dims(decoder_input, 0L)
   
   for(i in seq_len(MAX_LENGTH)) {
-    browser()
     c(enc_padding_mask, combined_mask, dec_padding_mask) %<-% create_masks(encoder_input, output)
     
     # predictions.shape == (batch_size, seq_len, vocab_size)
@@ -970,88 +973,83 @@ evaluate <- function(inp_sentence) {
                                                             combined_mask,
                                                             dec_padding_mask)
     
+
     # select the last word from the seq_len dimension
-    predictions <- predictions[ ,length(predictions$numpy()), ]  # (batch_size, 1, vocab_size)
-    predicted_id <- tf$cast(tf$argmax(predictions, axis = -1L), tf.int32)
+    predictions <- predictions[ ,predictions$shape$as_list()[2], ]  # (batch_size, 1, vocab_size)
+    predicted_id <- tf$cast(tf$argmax(predictions, axis = -1L), tf$int32)
         
     # return the result if the predicted_id is equal to the end token
-    if(predicted_id == tokenizer_en$vocab_size + 1) {
-      return(list(tf$squeeze(output, axis = 0), attention_weights))
+    if(as.integer(predicted_id) == (tokenizer_en$vocab_size + 1L)) {
+      output <- if(any(output$shape$as_list() == 1)) tf$squeeze(output, axis = 0) else output
+      return(list(output, attention_weights))
     }
-    
     # concatentate the predicted_id to the output which is given to the decoder
     # as its input.
     output <- tf$concat(list(output, predicted_id), axis = -1L)
   }
   
-  return(list(tf$squeeze(output, axis = 0L), attention_weights))
+  output <- if(any(output$shape$as_list() == 1)) tf$squeeze(output, axis = 0) else output
+  return(list(output, attention_weights))
 }
-
-sentence <- "este é um problema que temos que resolver."
-evaluate(sentence)
 
 ```
 
 
-```{r, eval = FALSE}
-plot_attention_weigths <- function(attention, sentence, result, layer) {
-  sentence = tokenizer_pt$encode(sentence)
+```{r}
+plot_attention_weights <- function(attention, sentense, result, layer) {
+  sentense <- tokenizer_pt$encode(sentense)
   
-  attention = tf$squeeze(attention[[layer]], axis=0)
+  attention <- tf$squeeze(attention[[layer]], axis=0)
   
+  tokens_pt <- sentense %>% map_chr(~tokenizer_pt$decode(c(.x, 0L)))
+  tokens_en <- result[result < tokenizer_en$vocab_size] %>% as.array() %>% map_chr(~tokenizer_en$decode(c(.x, 0L)))
+  
+  attention_df <- as.array(attention) %>% 
+    purrr::array_branch(1) %>% 
+    enframe("head", "weights") %>% 
+    mutate(head = paste("Head", head)) %>% 
+    mutate(weights = map(weights, ~.x[-1,] %>% 
+                           as.data.frame.matrix() %>% 
+                           mutate(output = str_pad((row_number()), width = 4, pad = 0, side = "left")) %>%
+                           gather(-output, key = "input", value = "weight"))) %>% 
+    unnest(cols = weights) %>%
+    mutate(
+      output = factor(output, labels = tokens_en),
+      input = factor(input, labels = c("<start>", tokens_pt, "<end>"))
+    )
+  
+  graph <- attention_df %>% 
+    ggplot(aes(x = input, y = output, fill = weight)) +
+    geom_tile() +
+    facet_wrap(~head, scales = "free") +
+    scale_fill_viridis_c() +
+    scale_x_discrete(position = "top") +
+    theme(
+        axis.text.x = element_text(angle = 90, hjust = 0, vjust = 0)
+    ) 
+  
+  print(graph)
   return(attention)
 }
-
-
-  for head in range(attention.shape[0]):
-    ax = fig.add_subplot(2, 4, head+1)
-
-    # plot the attention weights
-    ax.matshow(attention[head][:-1, :], cmap='viridis')
-
-    fontdict = {'fontsize': 10}
-
-    ax.set_xticks(range(len(sentence)+2))
-    ax.set_yticks(range(len(result)))
-
-    ax.set_ylim(len(result)-1.5, -0.5)
-
-    ax.set_xticklabels(
-        ['<start>']+[tokenizer_pt.decode([i]) for i in sentence]+['<end>'],
-        fontdict=fontdict, rotation=90)
-
-    ax.set_yticklabels([tokenizer_en.decode([i]) for i in result
-                        if i < tokenizer_en.vocab_size],
-                       fontdict=fontdict)
-
-    ax.set_xlabel('Head {}'.format(head+1))
-
-  plt.tight_layout()
-  plt.show()
 ```
 
-```{r, eval = FALSE}
+```{r}
 translate <- function(sentense, plot = '') {
   c(result, attention_weights) %<-% evaluate(sentense)
   
   predicted_sentence <- tokenizer_en$decode(result[result < tokenizer_en$vocab_size])
   
+  
+  if(shiny::isTruthy(plot)) {
+    plot_attention_weights(attention_weights, sentense, result, plot)
+  }
+  
   return(list(input = sentense, output = predicted_sentence))
 }
+```
 
-translate("este é um problema que temos que resolver.")
+```{r, fig.height=10}
+translate("este é um problema que temos que resolver.", plot='decoder_layer4_block2')
 print ("Real translation: this is a problem we have to solve .")
-
-def translate(sentence, plot=''):
-  result, attention_weights = evaluate(sentence)
-  
-  predicted_sentence = tokenizer_en.decode([i for i in result 
-                                            if i < tokenizer_en.vocab_size])  
-
-  print('Input: {}'.format(sentence))
-  print('Predicted translation: {}'.format(predicted_sentence))
-  
-  if plot:
-    plot_attention_weights(attention_weights, sentence, result, plot)
 ```
 
